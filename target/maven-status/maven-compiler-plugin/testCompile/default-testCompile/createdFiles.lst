@@ -1,1 +1,2 @@
-com\laboratorio\laboratorio_reservas\LaboratorioReservasApplicationTests.class
+com\laboratorio\laboratorio_reservas\services\ReservaServiceTest.class
+com\laboratorio\laboratorio_reservas\services\ReservaServiceUnitTest.class
