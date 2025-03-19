@@ -1,77 +1,95 @@
-package com.laboratorio.laboratorio_reservas;
+package com.laboratorio.laboratorio_reservas.services;
 
-import java.util.Date;
-import java.util.List;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import com.laboratorio.laboratorio_reservas.models.Laboratorio;
+import com.laboratorio.laboratorio_reservas.models.Reserva;
+import com.laboratorio.laboratorio_reservas.repositories.LaboratorioRepository;
+import com.laboratorio.laboratorio_reservas.repositories.ReservaRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.Mockito;
+import org.mockito.junit.jupiter.MockitoExtension;
 
-import com.laboratorio.laboratorio_reservas.models.Reserva;
-import com.laboratorio.laboratorio_reservas.repositories.ReservaRepository;
-import com.laboratorio.laboratorio_reservas.services.ReservaService;
+import java.util.Arrays;
+import java.util.Date;
+import java.util.List;
+import java.util.Optional;
 
-@SpringBootTest
-public class LaboratorioReservasApplicationTests {
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
 
-    @Autowired
+@ExtendWith(MockitoExtension.class)
+class ReservaServiceUnitTest {
+
+    @Mock
+    private ReservaRepository reservaRepository;
+
+    @Mock
+    private LaboratorioRepository laboratorioRepository;
+
+    @InjectMocks
     private ReservaService reservaService;
 
-    @Autowired
-    private ReservaRepository reservaRepository;
+    private Reserva reserva;
+    private Laboratorio laboratorio;
 
     @BeforeEach
     void setUp() {
-        reservaRepository.deleteAll();
+        reserva = new Reserva("lab1", "usuario1", new Date(), "08:00", "10:00", "Clase", "Pendiente");
+        laboratorio = new Laboratorio("Lab 1", 30, "Edificio A", true);
+        laboratorio.setId("lab1");
     }
 
     @Test
-    void givenOneReserva_whenFindById_thenShouldReturnReserva() {
-        Reserva reserva = new Reserva("lab1", "user1", new Date(), "08:00", "10:00", "Estudio", "Confirmada");
-        Reserva saved = reservaService.crearReserva(reserva);
-
-        List<Reserva> reservas = reservaRepository.findByIdLaboratorioAndFecha(saved.getIdLaboratorio(), saved.getFecha());
-        assertFalse(reservas.isEmpty());
-        assertEquals(saved.getId(), reservas.get(0).getId());
+    void crearReserva_CuandoLaboratorioNoExiste_DebeLanzarExcepcion() {
+        when(laboratorioRepository.findById("lab1")).thenReturn(Optional.empty());
+        Exception exception = assertThrows(RuntimeException.class, () -> reservaService.crearReserva(reserva));
+        assertEquals("Laboratorio no encontrado", exception.getMessage());
     }
 
     @Test
-    void givenNoReservas_whenFindById_thenShouldReturnEmpty() {
-        List<Reserva> reservas = reservaRepository.findByIdLaboratorioAndFecha("lab1", new Date());
-        assertTrue(reservas.isEmpty());
+    void crearReserva_CuandoLaboratorioNoDisponible_DebeLanzarExcepcion() {
+        laboratorio.setEstado(false);
+        when(laboratorioRepository.findById("lab1")).thenReturn(Optional.of(laboratorio));
+        Exception exception = assertThrows(RuntimeException.class, () -> reservaService.crearReserva(reserva));
+        assertEquals("Laboratorio no está disponible para reservas", exception.getMessage());
     }
 
     @Test
-    void givenNoReservas_whenCreate_thenShouldBeSuccessful() {
-        Reserva reserva = new Reserva("lab1", "user1", new Date(), "08:00", "10:00", "Estudio", "Confirmada");
-        Reserva saved = reservaService.crearReserva(reserva);
-        assertNotNull(saved);
-        assertEquals("Confirmada", saved.getEstado());
+    void crearReserva_CuandoHayConflictoHorario_DebeLanzarExcepcion() {
+        when(laboratorioRepository.findById("lab1")).thenReturn(Optional.of(laboratorio));
+        when(reservaRepository.findByIdLaboratorioAndFecha(anyString(), any(Date.class)))
+                .thenReturn(Arrays.asList(new Reserva("lab1", "usuario2", new Date(), "09:00", "11:00", "Otra clase", "Confirmada")));
+        Exception exception = assertThrows(RuntimeException.class, () -> reservaService.crearReserva(reserva));
+        assertEquals("Conflicto de horario: ya existe una reserva en esa franja horaria", exception.getMessage());
     }
 
     @Test
-    void givenOneReserva_whenDelete_thenShouldBeSuccessful() {
-        Reserva reserva = new Reserva("lab1", "user1", new Date(), "08:00", "10:00", "Estudio", "Confirmada");
-        Reserva saved = reservaService.crearReserva(reserva);
+    void crearReserva_CuandoTodoValido_DebeGuardarReserva() {
+        when(laboratorioRepository.findById("lab1")).thenReturn(Optional.of(laboratorio));
+        when(reservaRepository.findByIdLaboratorioAndFecha(anyString(), any(Date.class))).thenReturn(List.of());
+        when(reservaRepository.save(any(Reserva.class))).thenReturn(reserva);
 
-        reservaService.cancelarReserva(saved.getId());
-        Reserva updated = reservaRepository.findById(saved.getId()).orElse(null);
-        assertNotNull(updated);
-        assertEquals("Cancelada", updated.getEstado());
+        Reserva resultado = reservaService.crearReserva(reserva);
+        assertNotNull(resultado);
+        assertEquals("Confirmada", resultado.getEstado());
+        verify(reservaRepository, times(1)).save(reserva);
     }
 
     @Test
-    void givenOneReserva_whenDeleteAndFind_thenShouldReturnEmpty() {
-        Reserva reserva = new Reserva("lab1", "user1", new Date(), "08:00", "10:00", "Estudio", "Confirmada");
-        Reserva saved = reservaService.crearReserva(reserva);
+    void cancelarReserva_CuandoExiste_DebeActualizarEstado() {
+        when(reservaRepository.findById("reserva1")).thenReturn(Optional.of(reserva));
+        reservaService.cancelarReserva("reserva1");
+        assertEquals("Cancelada", reserva.getEstado());
+        verify(reservaRepository, times(1)).save(reserva);
+    }
 
-        reservaService.cancelarReserva(saved.getId());
-        List<Reserva> reservas = reservaRepository.findByIdLaboratorioAndFecha("lab1", new Date());
-        assertTrue(reservas.isEmpty() || reservas.get(0).getEstado().equals("Cancelada"));
+    @Test
+    void cancelarReserva_CuandoNoExiste_DebeLanzarExcepcion() {
+        when(reservaRepository.findById("reserva1")).thenReturn(Optional.empty());
+        Exception exception = assertThrows(RuntimeException.class, () -> reservaService.cancelarReserva("reserva1"));
+        assertEquals("Reserva no encontrada", exception.getMessage());
     }
 }

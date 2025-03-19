@@ -46,20 +46,23 @@ public class ReservaService {
         return false;
     }
 
-
     private boolean hayCruceHorario(Reserva r1, Reserva r2) {
         return (r1.getHoraInicio().compareTo(r2.getHoraFin()) < 0) &&
                (r1.getHoraFin().compareTo(r2.getHoraInicio()) > 0);
     }
-
-
-    
 
     public void cancelarReserva(String id) {
         Reserva reserva = reservaRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Reserva no encontrada"));
         reserva.setEstado("Cancelada");
         reservaRepository.save(reserva);
+    }
+
+    public void eliminarReserva(String id) {
+        if (!reservaRepository.existsById(id)) {
+            throw new RuntimeException("Reserva no encontrada");
+        }
+        reservaRepository.deleteById(id);
     }
 
     public List<Reserva> listarReservas() {
