@@ -49,9 +49,9 @@ jobs:
           java-version: '21'
 
       - name: Set MongoDB URI
-        run: echo "SPRING_DATA_MONGODB_URI=mongodb://localhost:27017/testdb" >> $GITHUB_ENV
+        run: echo "SPRING_DATA_MONGODB_URI=mongodb://localhost:8080/testdb" >> $GITHUB_ENV
 
-      - name: Run tests (verify phase)
+      - name: Run tests
         run: mvn verify
 
   deploy:
